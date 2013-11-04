@@ -14,6 +14,8 @@
 #include <SDL/SDL.h>
 #include <SDL/SDL_ttf.h>
 #include <sys/time.h>
+#include <iosfwd>
+#include <sstream>
 
 #define GRID_HEIGHT 20
 #define GRID_WIDTH 10
@@ -36,16 +38,20 @@ struct Piece {
 int GameVelocity = 500;
 Piece * current;
 int gameGrid[GRID_WIDTH][GRID_HEIGHT];
+TTF_Font*font;
 
-
-int COLORS[3] = {0x0000FF, 0xFF0000, 0x00FF00};
+int COLORS[] = {0x0000FF, 0xFF0000, 0x00FF00, 0xFFFF00};
 long lastTick = 0;
 
+int points = 0;
+bool lose = false;
+bool pause = false;
 void rotate(Piece& piece, short arrd);
 void generate_piece(Piece &piece);
 void update_scene(SDL_Surface *screen);
 bool new_tick();
 bool game_tick();
+void reset();
 
 timeval before;
 
@@ -209,6 +215,15 @@ int main(int argc, char *argv[]) {
 
     SDL_WM_SetCaption("Tetris", NULL);
 
+
+    TTF_Init();
+
+    font = TTF_OpenFont("arial.ttf", 18);
+    if(font == NULL)
+    {
+        printf("Error loading font!!\n");
+        return 0;
+    }
     bool running = true;
 
     while (running) {
@@ -241,6 +256,17 @@ int main(int argc, char *argv[]) {
                         case SDLK_DOWN:
                             __update_scene = move(MOVE_DOWN);
                             break;
+                        case SDLK_SPACE:
+                            if(lose)
+                            {
+                                reset();
+                            }
+                            else
+                            {
+                                
+                                pause = !pause;
+                            }
+                            break;
                     }
                     if (__update_scene) {
                         update_scene(screen);
@@ -262,7 +288,19 @@ bool new_tick() {
     return false;
 }
 
+void reset() {
+    for (int i = 0; i < GRID_WIDTH; i++) {
+        for (int j = 0; j < GRID_HEIGHT; j++) {
+            gameGrid[i][j] = 0;
+        }
+    }
+    GameVelocity = 500;
+    current = NULL;
+    lose = false;
+}
+
 bool game_tick() {
+    if(pause||lose) return true;
     if (current == NULL) {
         Piece * p = new Piece();
         generate_piece(*p);
@@ -315,7 +353,9 @@ bool game_tick() {
                         break;
                     }
                 }
+                int mult = 1;
                 if (found) {
+                    points += (20 ^ (mult++));
                     for (int i = 0; i < GRID_WIDTH; i++) {
                         for (int j = pos; j < GRID_HEIGHT - 1; j++) {
                             gameGrid[i][j] = gameGrid[i][j + 1];
@@ -323,7 +363,10 @@ bool game_tick() {
                     }
                 }
             }
+            GameVelocity--;
 
+            if (current->y + 3 >= GRID_HEIGHT)
+                lose = true;
 
             delete current;
             current = NULL;
@@ -337,7 +380,7 @@ bool game_tick() {
 }
 
 void generate_piece(Piece& piece) {
-    switch (random(3)) {
+    switch (random(4)) {
         case 0:
             piece.shape[0][0] = COLORS[0];
             piece.shape[0][1] = COLORS[0];
@@ -356,13 +399,36 @@ void generate_piece(Piece& piece) {
             piece.shape[1][0] = COLORS[2];
             piece.shape[1][1] = COLORS[2];
             break;
+        case 3:
+            piece.shape[2][0] = COLORS[3];
+            piece.shape[2][1] = COLORS[3];
+            piece.shape[2][2] = COLORS[3];
+
+            piece.shape[1][2] = COLORS[3];
+            break;
     }
 
     piece.x = (GRID_WIDTH / 2) - 2;
     piece.y = GRID_HEIGHT - 2;
 }
+void draw_text(SDL_Surface * screen, char * data, int x, int y)
+{
+    
+    SDL_Color c = {0xFF, 0x00, 0x00};
+    SDL_Surface *t = TTF_RenderText_Blended(font, data, c);
+    if (t != NULL) {
 
+        SDL_Rect text_rect = {x, y, t->w, t->h};
+        SDL_BlitSurface(t, &t->clip_rect, screen, &text_rect);
+
+    }
+    else
+    {
+        printf("Null pointer!\n");
+    }
+}
 void update_scene(SDL_Surface *screen) {
+    
     //Draw background
     SDL_Rect rect = {0, 0, screen->w, screen->h};
     Uint32 a = 0x000000; //SDL_MapRGB(screen->format, 255, 0, 0);
@@ -387,7 +453,32 @@ void update_scene(SDL_Surface *screen) {
             }
         }
     }
+    
+    std::stringstream ss;
+    ss << "Puntos " << points;
+    
+    SDL_Color c = {0xFF, 0x00, 0x00};
+    SDL_Surface *t = TTF_RenderText_Blended(font, ss.str().c_str(), c);
+    if (t != NULL) {
 
+        SDL_Rect text_rect = {0, 0, t->w, t->h};
+        SDL_BlitSurface(t, &t->clip_rect, screen, &text_rect);
 
+    }
+    else
+    {
+        printf("Null pointer!\n");
+    }
+
+    if(lose)
+    {
+        
+        draw_text(screen, "YOU LOSE!!", screen->w / 2, screen->h / 2);
+    }
+    if(pause)
+    {
+        
+        draw_text(screen, "PAUSE", screen->w / 2, screen->h / 2);
+    }
     SDL_UpdateRect(screen, 0, 0, 0, 0);
 }
